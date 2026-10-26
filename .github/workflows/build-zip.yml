@@ -1,0 +1,51 @@
+name: Build APK from zip
+
+on:
+  push:
+    paths:
+      - '*.zip'
+      - '.github/workflows/build-zip.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unzip the project
+        run: |
+          set -e
+          ZIP=$(ls *.zip | head -n 1)
+          echo "Using $ZIP"
+          mkdir -p project
+          unzip -q "$ZIP" -d project
+          SETTINGS=$(find project -name settings.gradle.kts | head -n 1)
+          test -n "$SETTINGS"
+          echo "PROJECT_DIR=$(dirname "$SETTINGS")" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+
+      - name: Build debug APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: gradle assembleDebug --no-daemon
+
+      - name: Publish APK
+        uses: ncipollo/release-action@v1
+        with:
+          tag: latest
+          name: Latest build
+          artifacts: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          allowUpdates: true
+          replacesArtifacts: true
+          makeLatest: true
